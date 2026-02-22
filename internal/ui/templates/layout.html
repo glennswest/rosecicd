@@ -1,0 +1,29 @@
+{{define "head"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rosecicd</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+<nav>
+    <div class="container">
+        <a class="logo" href="/">rose<span>cicd</span></a>
+        <div class="links">
+            <a href="/">Dashboard</a>
+            <a href="/repos">Repos</a>
+            <a href="/builds">Builds</a>
+        </div>
+    </div>
+</nav>
+<main class="container">
+{{end}}
+
+{{define "foot"}}
+</main>
+</body>
+</html>
+{{end}}

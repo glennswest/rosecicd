@@ -1,0 +1,68 @@
+{{define "repo_detail"}}
+{{template "head"}}
+
+<div class="detail-header">
+    <div>
+        <h1>{{.Repo.Name}}</h1>
+        <div class="card-meta"><a href="{{.Repo.URL}}" target="_blank">{{.Repo.URL}}</a></div>
+    </div>
+    <form hx-post="/api/build" hx-vals='{"repo":"{{.Repo.Name}}"}' hx-swap="none">
+        <button type="submit" class="btn btn-primary">Build Now</button>
+    </form>
+</div>
+
+<div class="detail-meta">
+    <div class="meta-item">
+        <label>Branch</label>
+        <span>{{.Repo.Branch}}</span>
+    </div>
+    <div class="meta-item">
+        <label>Dockerfile</label>
+        <span>{{.Repo.Dockerfile}}</span>
+    </div>
+    <div class="meta-item">
+        <label>Tags</label>
+        <span>{{range .Repo.Tags}}{{.}} {{end}}</span>
+    </div>
+    <div class="meta-item">
+        <label>Poll Interval</label>
+        <span>{{.Repo.Poll}}</span>
+    </div>
+</div>
+
+<div class="section">
+    <h2>Build History</h2>
+    {{if .Builds}}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Started</th>
+                    <th>Duration</th>
+                    <th>Commit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Builds}}
+                <tr>
+                    <td><a href="/builds/{{.ID}}">{{.ID}}</a></td>
+                    <td><span class="badge badge-{{badgeClass .Status}}">{{.Status}}</span></td>
+                    <td>{{timeAgo .StartTime}}</td>
+                    <td>{{duration .StartTime .EndTime}}</td>
+                    <td>{{if .Commit}}{{.Commit}}{{else}}-{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <div class="empty">
+        <p>No builds yet. Click "Build Now" to start one.</p>
+    </div>
+    {{end}}
+</div>
+
+{{template "foot"}}
+{{end}}

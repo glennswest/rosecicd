@@ -1,0 +1,57 @@
+{{define "dashboard"}}
+{{template "head"}}
+
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p>{{len .Repos}} repositories &middot; {{.ActiveBuilds}} active builds</p>
+</div>
+
+<div class="quick-build">
+    <h3>Quick Build</h3>
+    <form hx-post="/api/quickbuild" hx-target="#build-result" hx-swap="innerHTML">
+        <input type="text" name="url" placeholder="https://github.com/user/repo" required>
+        <button type="submit" class="btn btn-primary">Build</button>
+    </form>
+    <div id="build-result"></div>
+</div>
+
+<div class="card-grid">
+    {{range .Repos}}
+    <div class="card">
+        <div class="card-header">
+            <h3><a href="/repos/{{.Name}}">{{.Name}}</a></h3>
+            {{if .LastBuild}}
+            <span class="badge badge-{{badgeClass .LastBuild.Status}}">{{.LastBuild.Status}}</span>
+            {{else}}
+            <span class="badge badge-pending">no builds</span>
+            {{end}}
+        </div>
+        <div class="card-meta">
+            <a href="{{.URL}}" target="_blank">{{.URL}}</a>
+        </div>
+        {{if .LastBuild}}
+        <div class="card-meta" style="margin-top: 0.5rem;">
+            Last: {{timeAgo .LastBuild.StartTime}}
+        </div>
+        {{end}}
+        <div class="card-actions">
+            <form hx-post="/api/build" hx-vals='{"repo":"{{.Name}}"}' hx-swap="none">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    Build Now
+                </button>
+            </form>
+            <a href="/repos/{{.Name}}" class="btn btn-sm">Details</a>
+        </div>
+    </div>
+    {{end}}
+
+    {{if not .Repos}}
+    <div class="empty">
+        <h3>No repositories configured</h3>
+        <p>Add repos to config.yaml to get started.</p>
+    </div>
+    {{end}}
+</div>
+
+{{template "foot"}}
+{{end}}

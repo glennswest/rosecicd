@@ -1,0 +1,47 @@
+server:
+  addr: ":8090"
+
+github:
+  user: "glennswest"
+  token: "${GHCR_TOKEN}"
+
+registry:
+  local: "192.168.200.2:5000"
+  ghcr: "ghcr.io/glennswest"
+
+mkube:
+  apiURL: "http://192.168.200.2:8080"
+
+build:
+  builderImage: "192.168.200.2:5000/rosecicd-builder:edge"
+  network: "gt"
+  cacheDir: "/data/rosecicd/cache"
+
+repos:
+  - name: mkube
+    url: https://github.com/glennswest/mkube
+    branch: main
+    dockerfile: Dockerfile
+    tags: [edge]
+    poll: 5m
+
+  - name: fastregistry
+    url: https://github.com/glennswest/fastregistry
+    branch: main
+    dockerfile: Dockerfile
+    tags: [edge]
+    poll: 10m
+
+  - name: microdns
+    url: https://github.com/glennswest/microdns
+    branch: main
+    dockerfile: Containerfile
+    tags: [edge]
+    poll: 10m
+
+  - name: mkube-console
+    url: https://github.com/glennswest/mkube-console
+    branch: main
+    dockerfile: Containerfile
+    tags: [edge]
+    poll: 10m

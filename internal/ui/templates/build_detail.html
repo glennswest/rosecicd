@@ -1,0 +1,58 @@
+{{define "build_detail"}}
+{{template "head"}}
+
+<div class="detail-header">
+    <div>
+        <h1>Build {{.ID}}</h1>
+        <div class="card-meta"><a href="/repos/{{.RepoName}}">{{.RepoName}}</a></div>
+    </div>
+    <div>
+        <span class="badge badge-{{badgeClass .Status}}">{{.Status}}</span>
+        {{if eq (badgeClass .Status) "success"}}
+        <form hx-post="/api/build" hx-vals='{"repo":"{{.RepoName}}"}' hx-swap="none" style="display:inline; margin-left: 0.5rem;">
+            <button type="submit" class="btn btn-sm">Rebuild</button>
+        </form>
+        {{end}}
+    </div>
+</div>
+
+<div class="detail-meta">
+    <div class="meta-item">
+        <label>Pod</label>
+        <span>{{.PodName}}</span>
+    </div>
+    <div class="meta-item">
+        <label>Started</label>
+        <span>{{.StartTime.Format "2006-01-02 15:04:05"}}</span>
+    </div>
+    <div class="meta-item">
+        <label>Duration</label>
+        <span>{{duration .StartTime .EndTime}}</span>
+    </div>
+    <div class="meta-item">
+        <label>Commit</label>
+        <span>{{if .Commit}}{{.Commit}}{{else}}-{{end}}</span>
+    </div>
+</div>
+
+{{if .Error}}
+<div class="section">
+    <h2>Error</h2>
+    <div class="build-log" style="color: var(--danger);">{{.Error}}</div>
+</div>
+{{end}}
+
+<div class="section">
+    <h2>Build Log</h2>
+    {{if .Logs}}
+    <div class="build-log"
+         {{if or (eq (badgeClass .Status) "running") (eq (badgeClass .Status) "pending")}}
+         hx-get="/builds/{{.ID}}" hx-trigger="every 5s" hx-select=".build-log" hx-swap="outerHTML"
+         {{end}}>{{.Logs}}</div>
+    {{else}}
+    <div class="build-log">Waiting for logs...</div>
+    {{end}}
+</div>
+
+{{template "foot"}}
+{{end}}

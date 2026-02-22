@@ -1,0 +1,47 @@
+{{define "builds"}}
+{{template "head"}}
+
+<div class="page-header">
+    <h1>Builds</h1>
+</div>
+
+{{if .}}
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Repo</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th>Commit</th>
+            </tr>
+        </thead>
+        <tbody id="build-list">
+            {{range .}}
+            {{template "build_row" .}}
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{else}}
+<div class="empty">
+    <h3>No builds yet</h3>
+    <p>Trigger a build from the dashboard or a repo page.</p>
+</div>
+{{end}}
+
+{{template "foot"}}
+{{end}}
+
+{{define "build_row"}}
+<tr>
+    <td><a href="/builds/{{.ID}}">{{.ID}}</a></td>
+    <td><a href="/repos/{{.RepoName}}">{{.RepoName}}</a></td>
+    <td><span class="badge badge-{{badgeClass .Status}}">{{.Status}}</span></td>
+    <td>{{timeAgo .StartTime}}</td>
+    <td>{{duration .StartTime .EndTime}}</td>
+    <td>{{if .Commit}}{{.Commit}}{{else}}-{{end}}</td>
+</tr>
+{{end}}
