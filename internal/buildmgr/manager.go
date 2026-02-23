@@ -1,7 +1,6 @@
 package buildmgr
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -14,40 +13,89 @@ import (
 type BuildStatus string
 
 const (
-	StatusPending  BuildStatus = "pending"
-	StatusRunning  BuildStatus = "running"
-	StatusSuccess  BuildStatus = "success"
-	StatusFailed   BuildStatus = "failed"
-	StatusUnknown  BuildStatus = "unknown"
+	StatusPending BuildStatus = "pending"
+	StatusQueued  BuildStatus = "queued"
+	StatusRunning BuildStatus = "running"
+	StatusSuccess BuildStatus = "success"
+	StatusFailed  BuildStatus = "failed"
+	StatusUnknown BuildStatus = "unknown"
 )
 
 type Build struct {
-	ID        string      `json:"id"`
-	RepoName  string      `json:"repoName"`
-	Status    BuildStatus `json:"status"`
-	PodName   string      `json:"podName"`
-	StartTime time.Time   `json:"startTime"`
-	EndTime   time.Time   `json:"endTime,omitempty"`
-	Commit    string      `json:"commit,omitempty"`
-	Logs      string      `json:"logs,omitempty"`
-	Error     string      `json:"error,omitempty"`
+	ID          string      `json:"id"`
+	RepoName    string      `json:"repoName"`
+	Status      BuildStatus `json:"status"`
+	PodName     string      `json:"podName"`
+	BuilderName string      `json:"builderName,omitempty"`
+	QueuePos    int         `json:"queuePos,omitempty"`
+	StartTime   time.Time   `json:"startTime"`
+	EndTime     time.Time   `json:"endTime,omitempty"`
+	Commit      string      `json:"commit,omitempty"`
+	Logs        string      `json:"logs,omitempty"`
+	Error       string      `json:"error,omitempty"`
+}
+
+// BuilderStatus is used by the UI to show builder state.
+type BuilderStatus struct {
+	Name       string
+	Arch       string
+	Type       string
+	Online     bool
+	Running    *Build
+	QueueDepth int
 }
 
 type Manager struct {
-	cfg    *config.Config
-	mu     sync.RWMutex
-	builds map[string]*Build
-	nextID int
-	stopCh chan struct{}
+	cfg      *config.Config
+	mu       sync.RWMutex
+	builds   map[string]*Build
+	nextID   int
+	builders []Builder
+	queues   map[string]*BuildQueue // builder name → queue
+	stopCh   chan struct{}
 }
 
 func New(cfg *config.Config) *Manager {
-	return &Manager{
+	m := &Manager{
 		cfg:    cfg,
 		builds: make(map[string]*Build),
 		nextID: 1,
+		queues: make(map[string]*BuildQueue),
 		stopCh: make(chan struct{}),
 	}
+
+	// Initialize builders from config
+	if len(cfg.Builders) == 0 {
+		// Backward compat: no builders configured, create a default mkube builder
+		bc := config.BuilderConfig{
+			Name:     "mkube-arm64",
+			Type:     "mkube",
+			Arch:     "arm64",
+			Capacity: 1,
+		}
+		b := NewMkubeBuilder(cfg, bc)
+		m.builders = append(m.builders, b)
+		m.queues[b.Name()] = NewBuildQueue(b)
+		log.Printf("[mgr] initialized default mkube builder: %s (%s)", b.Name(), b.Arch())
+	} else {
+		for _, bc := range cfg.Builders {
+			var b Builder
+			switch bc.Type {
+			case "ssh":
+				b = NewSSHBuilder(cfg, bc)
+			case "mkube":
+				b = NewMkubeBuilder(cfg, bc)
+			default:
+				log.Printf("[mgr] unknown builder type %q for %s, skipping", bc.Type, bc.Name)
+				continue
+			}
+			m.builders = append(m.builders, b)
+			m.queues[b.Name()] = NewBuildQueue(b)
+			log.Printf("[mgr] initialized builder: %s (type=%s, arch=%s)", b.Name(), bc.Type, b.Arch())
+		}
+	}
+
+	return m
 }
 
 func (m *Manager) TriggerBuild(repo config.RepoConfig, commit string) (*Build, error) {
@@ -56,66 +104,54 @@ func (m *Manager) TriggerBuild(repo config.RepoConfig, commit string) (*Build, e
 	m.nextID++
 	m.mu.Unlock()
 
-	podName := fmt.Sprintf("rosecicd-%s-%s", repo.Name, id)
+	// Select builder for this repo
+	b := m.selectBuilder(repo)
+	if b == nil {
+		return nil, fmt.Errorf("no builder available for repo %s (arch=%s)", repo.Name, repo.Arch)
+	}
 
-	b := &Build{
-		ID:        id,
-		RepoName:  repo.Name,
-		Status:    StatusPending,
-		PodName:   podName,
-		StartTime: time.Now(),
-		Commit:    commit,
+	build := &Build{
+		ID:          id,
+		RepoName:    repo.Name,
+		Status:      StatusQueued,
+		PodName:     fmt.Sprintf("rosecicd-%s-%s", repo.Name, id),
+		BuilderName: b.Name(),
+		StartTime:   time.Now(),
+		Commit:      commit,
 	}
 
 	m.mu.Lock()
-	m.builds[id] = b
+	m.builds[id] = build
 	m.mu.Unlock()
-
-	go m.runBuild(b, repo)
-	return b, nil
-}
-
-func (m *Manager) runBuild(b *Build, repo config.RepoConfig) {
-	m.setBuildStatus(b.ID, StatusRunning)
 
 	spec := m.buildSpec(repo)
-	specJSON, err := json.Marshal(spec)
-	if err != nil {
-		m.failBuild(b.ID, fmt.Sprintf("marshal spec: %v", err))
-		return
+	job := &BuildJob{
+		Build: build,
+		Spec:  spec,
+		Repo:  repo,
 	}
 
-	if err := CreateBuildPod(m.cfg, b.PodName, string(specJSON)); err != nil {
-		m.failBuild(b.ID, fmt.Sprintf("create pod: %v", err))
-		return
+	queue := m.queues[b.Name()]
+	pos := queue.Enqueue(job)
+	build.QueuePos = pos
+
+	log.Printf("[mgr] build %s queued on %s (position %d)", id, b.Name(), pos)
+	return build, nil
+}
+
+func (m *Manager) selectBuilder(repo config.RepoConfig) Builder {
+	for _, b := range m.builders {
+		// If repo has an arch preference, match it
+		if repo.Arch != "" && b.Arch() != repo.Arch {
+			continue
+		}
+		return b
 	}
-
-	log.Printf("[build %s] pod %s created, waiting for completion", b.ID, b.PodName)
-
-	status, err := WaitForPod(m.cfg, b.PodName, m.stopCh)
-	if err != nil {
-		m.failBuild(b.ID, fmt.Sprintf("wait for pod: %v", err))
-		return
+	// No arch match — return first available builder
+	if repo.Arch == "" && len(m.builders) > 0 {
+		return m.builders[0]
 	}
-
-	logs, _ := GetPodLogs(m.cfg, b.PodName)
-
-	m.mu.Lock()
-	b.Logs = logs
-	b.EndTime = time.Now()
-	m.mu.Unlock()
-
-	if status == "Succeeded" {
-		m.setBuildStatus(b.ID, StatusSuccess)
-		log.Printf("[build %s] succeeded", b.ID)
-	} else {
-		m.failBuild(b.ID, fmt.Sprintf("pod status: %s", status))
-	}
-
-	// Cleanup pod
-	if err := DeletePod(m.cfg, b.PodName); err != nil {
-		log.Printf("[build %s] cleanup error: %v", b.ID, err)
-	}
+	return nil
 }
 
 func (m *Manager) buildSpec(repo config.RepoConfig) builder.BuildSpec {
@@ -139,30 +175,20 @@ func (m *Manager) buildSpec(repo config.RepoConfig) builder.BuildSpec {
 	}
 }
 
-func (m *Manager) setBuildStatus(id string, status BuildStatus) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if b, ok := m.builds[id]; ok {
-		b.Status = status
-	}
-}
-
-func (m *Manager) failBuild(id string, errMsg string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if b, ok := m.builds[id]; ok {
-		b.Status = StatusFailed
-		b.Error = errMsg
-		b.EndTime = time.Now()
-		log.Printf("[build %s] failed: %s", id, errMsg)
-	}
-}
-
 func (m *Manager) GetBuild(id string) *Build {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if b, ok := m.builds[id]; ok {
 		cp := *b
+		// Update queue position dynamically
+		if cp.Status == StatusQueued {
+			for _, q := range m.queues {
+				if pos := q.QueuePosition(id); pos >= 0 {
+					cp.QueuePos = pos
+					break
+				}
+			}
+		}
 		return &cp
 	}
 	return nil
@@ -201,6 +227,39 @@ func (m *Manager) FindRepo(name string) (config.RepoConfig, bool) {
 	return config.RepoConfig{}, false
 }
 
+// ListBuilders returns status for all configured builders.
+func (m *Manager) ListBuilders() []BuilderStatus {
+	var result []BuilderStatus
+	for _, b := range m.builders {
+		q := m.queues[b.Name()]
+		running, _ := q.QueueStatus()
+
+		var runBuild *Build
+		if running != nil {
+			cp := *running.Build
+			runBuild = &cp
+		}
+
+		bType := "mkube"
+		if _, ok := b.(*SSHBuilder); ok {
+			bType = "ssh"
+		}
+
+		result = append(result, BuilderStatus{
+			Name:       b.Name(),
+			Arch:       b.Arch(),
+			Type:       bType,
+			Online:     b.Healthy(),
+			Running:    runBuild,
+			QueueDepth: q.QueueDepth(),
+		})
+	}
+	return result
+}
+
 func (m *Manager) Stop() {
 	close(m.stopCh)
+	for _, q := range m.queues {
+		q.Stop()
+	}
 }

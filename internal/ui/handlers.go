@@ -39,6 +39,7 @@ func Register(mux *http.ServeMux, cfg *config.Config, mgr *buildmgr.Manager) {
 	mux.HandleFunc("/repos/", h.repoDetail)
 	mux.HandleFunc("/builds", h.builds)
 	mux.HandleFunc("/builds/", h.buildDetail)
+	mux.HandleFunc("/builders", h.buildersPage)
 	mux.HandleFunc("/api/build", h.triggerBuild)
 	mux.HandleFunc("/api/quickbuild", h.quickBuild)
 }
@@ -46,6 +47,7 @@ func Register(mux *http.ServeMux, cfg *config.Config, mgr *buildmgr.Manager) {
 type dashboardData struct {
 	Repos        []repoCard
 	ActiveBuilds int
+	Builders     []buildmgr.BuilderStatus
 }
 
 type repoCard struct {
@@ -76,7 +78,11 @@ func (h *handlers) dashboard(w http.ResponseWriter, r *http.Request) {
 		cards = append(cards, repoCard{Name: repo.Name, URL: repo.URL, LastBuild: last})
 	}
 
-	h.render(w, "dashboard", dashboardData{Repos: cards, ActiveBuilds: active})
+	h.render(w, "dashboard", dashboardData{
+		Repos:        cards,
+		ActiveBuilds: active,
+		Builders:     h.mgr.ListBuilders(),
+	})
 }
 
 func (h *handlers) repos(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +114,10 @@ func (h *handlers) builds(w http.ResponseWriter, r *http.Request) {
 		return all[i].StartTime.After(all[j].StartTime)
 	})
 	h.render(w, "builds", all)
+}
+
+func (h *handlers) buildersPage(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "builders", h.mgr.ListBuilders())
 }
 
 func (h *handlers) buildDetail(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +223,8 @@ func badgeClass(s buildmgr.BuildStatus) string {
 		return "failed"
 	case buildmgr.StatusRunning:
 		return "running"
+	case buildmgr.StatusQueued:
+		return "pending"
 	default:
 		return "pending"
 	}

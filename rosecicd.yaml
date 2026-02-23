@@ -21,7 +21,12 @@ spec:
       volumeMounts:
         - name: cache
           mountPath: /data/rosecicd/cache
+        - name: ssh-key
+          mountPath: /etc/rosecicd/ssh
   volumes:
     - name: cache
       hostPath:
         path: /data/rosecicd/cache
+    - name: ssh-key
+      hostPath:
+        path: /data/rosecicd/ssh

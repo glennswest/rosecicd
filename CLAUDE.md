@@ -6,15 +6,20 @@ Inherits core rules from parent `../CLAUDE.md`. This file tracks project-specifi
 
 ## Work Plan
 
-### Current Version: `v0.1.6`
+### Current Version: `v0.2.0`
 
 ### Current Sprint / Active Tasks
 
-- [ ] End-to-end test: trigger manual build via web UI
-- [ ] Verify build pod lifecycle (create -> build -> push -> cleanup)
+- [ ] Create LXC 113 on pvex.gw.lo (buildx86.gw.lo)
+- [ ] Install buildah/podman/git in LXC, configure SSH keys
+- [ ] Place SSH private key at /data/rosecicd/ssh/id_ed25519 on rose1
+- [ ] Rebuild controller image and push to registry
+- [ ] Redeploy controller to mkube
+- [ ] End-to-end test: trigger x86 build via web UI
+- [ ] End-to-end test: trigger ARM64 build via web UI
+- [ ] Verify queue ordering (trigger 2 builds on same builder)
 - [ ] Verify image appears in local registry after build
 - [ ] Test GitHub polling auto-trigger
-- [ ] Set up DNS alias so rosecicd.gt.lo resolves to pod IP
 
 ### In Progress
 
@@ -25,7 +30,6 @@ Inherits core rules from parent `../CLAUDE.md`. This file tracks project-specifi
 - [ ] v1.0.0 — Stable build pipeline with reliable polling, log persistence, and error recovery
 - [ ] Webhook support — GitHub webhook triggers instead of polling
 - [ ] Build caching — Layer cache across builds for faster rebuilds
-- [ ] Multi-arch builds — Support both arm64 and amd64 builds
 
 ### Completed
 
@@ -43,11 +47,20 @@ Inherits core rules from parent `../CLAUDE.md`. This file tracks project-specifi
 - [x] (2026-02-23) Deploy controller to mkube — running at 192.168.200.13:8090
 - [x] (2026-02-23) Fix config loading — embed default config at /usr/share/rosecicd/, fallback when volume mount empty
 - [x] (2026-02-23) Fix volume mount overlay — config volume hid embedded files, removed from pod spec
+- [x] (2026-02-23) Build queue system — FIFO per-builder, one build at a time
+- [x] (2026-02-23) Builder interface — pluggable backends (mkube, SSH)
+- [x] (2026-02-23) SSH builder — remote builds on x86 LXC via SSH
+- [x] (2026-02-23) MkubeBuilder adapter — wraps existing pod lifecycle
+- [x] (2026-02-23) Builders page in web UI — status, arch, queue depth
+- [x] (2026-02-23) Builder routing — repos route to builders by arch
+- [x] (2026-02-23) Config: builders section + arch field on repos
+- [x] (2026-02-23) SSH key volume mount in pod spec
 
 ### Release History
 
 | Version | Date | Summary |
 |---------|------|---------|
+| v0.2.0  | 2026-02-23 | Build queue, SSH builder, multi-builder architecture |
 | v0.1.6  | 2026-02-23 | Controller deployed to mkube, config fallback fix |
 | v0.1.3  | 2026-02-23 | Builder image rebuilt and pushed to local registry |
 | v0.1.2  | 2026-02-23 | Controller image built and pushed to local registry |
@@ -59,11 +72,11 @@ Inherits core rules from parent `../CLAUDE.md`. This file tracks project-specifi
 ## Project Context
 
 ### Tech Stack
-- Language: Go 1.23
+- Language: Go 1.24
 - Framework: net/http (stdlib), html/template, HTMX + Alpine.js
 - Build system: podman (multi-stage Dockerfiles), build.sh
 - Test framework: go test (stdlib)
-- Dependencies: gopkg.in/yaml.v3
+- Dependencies: gopkg.in/yaml.v3, golang.org/x/crypto/ssh
 
 ### Key Directories
 ```
@@ -71,11 +84,11 @@ cmd/rosecicd/              — Controller entry point
 cmd/rosecicd-builder/      — Builder pod entry point
 internal/config/           — YAML config loading with env var expansion
 internal/builder/          — Build spec, git clone, buildah bud/push
-internal/buildmgr/         — Build orchestration, pod lifecycle via mkube API
+internal/buildmgr/         — Build orchestration, queue, builder backends
 internal/poller/           — GitHub API polling for new commits
 internal/server/           — HTTP server setup
 internal/ui/               — HTMX web UI handlers, templates, CSS
-internal/ui/templates/     — HTML templates (layout, dashboard, repos, builds)
+internal/ui/templates/     — HTML templates (layout, dashboard, repos, builds, builders)
 internal/ui/static/css/    — Dark theme CSS
 deploy/                    — Default config.yaml
 ```
@@ -109,8 +122,12 @@ rosecicd.yaml        — image tag in pod spec
 ### Important Patterns & Conventions
 
 - **Two images**: `rosecicd` (controller, long-running) and `rosecicd-builder` (build pods, ephemeral)
-- **No env vars in containers**: mkube/RouterOS doesn't pass env vars. Builder reads config from mounted JSON file at `/etc/rosecicd/build-spec.json`
-- **buildah flags**: `--isolation chroot --storage-driver vfs` required because RouterOS containers lack privileged mode and overlayfs
+- **Two builder types**: `mkube` (ARM64 pods on RouterOS) and `ssh` (remote x86 LXC)
+- **Build queue**: One build at a time per builder, FIFO ordering. Repos route to builders by arch.
+- **No env vars in mkube containers**: Builder reads config from mounted JSON file at `/etc/rosecicd/build-spec.json`
+- **SSH builder**: No `--isolation chroot --storage-driver vfs` needed — LXC with nesting=1 supports overlayfs
+- **mkube builder**: Still uses `--isolation chroot --storage-driver vfs` for RouterOS compatibility
+- **buildah flags**: `--isolation chroot --storage-driver vfs` required for mkube pods (RouterOS containers)
 - **Local registry is HTTP**: Always use `--tls-verify=false` with podman push to `192.168.200.2:5000`
 - **Config uses `${ENV_VAR}` expansion**: Tokens loaded from environment, never hardcoded
 - **mkube API**: REST at `http://192.168.200.2:8082`, k8s-style pod specs via `oc apply`
@@ -126,5 +143,7 @@ rosecicd.yaml        — image tag in pod spec
 - **Config fallback**: Default config embedded at `/usr/share/rosecicd/config.yaml`, NOT under `/etc/rosecicd/` because volume mounts overlay that directory
 - **Pod IP**: 192.168.200.13 (assigned by mkube, may change on pod recreation)
 - **DNS alias**: `rosecicd` (via vkube.io/aliases annotation)
+- **x86 build agent**: LXC 113 on pvex.gw.lo, Debian 13, 4 cores, 4GB RAM, 40G /build disk
+- **SSH key for builder**: ed25519 key at /etc/rosecicd/ssh/id_ed25519 (mounted from host)
 
 ---

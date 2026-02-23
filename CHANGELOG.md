@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.2.0] — 2026-02-23
+
+### Added
+- Build queue system — one build at a time per builder, FIFO ordering
+- Builder interface with pluggable backends (mkube pods, SSH remote)
+- SSH builder for x86 LXC build agent (`buildx86.gw.lo`)
+- MkubeBuilder adapter wrapping existing pod lifecycle
+- Builders page in web UI showing status, arch, current build, queue depth
+- Builder and queue position columns in builds list
+- Builder name in build detail metadata
+- Builder status summary on dashboard
+- `BuilderConfig` in config with name, type, arch, host, SSH key path, build dir
+- `Arch` field on repo config for builder routing
+- SSH key volume mount in pod spec for remote builder auth
+- `golang.org/x/crypto/ssh` dependency
+
+### Changed
+- Build manager routes builds to appropriate builder by architecture match
+- Builds are queued instead of spawned as unbounded goroutines
+- Build status now includes `queued` state with queue position
+
 ## [Unreleased]
 
 ### 2026-02-23

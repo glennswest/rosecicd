@@ -15,7 +15,20 @@ type Config struct {
 	Registry RegistryConfig `yaml:"registry"`
 	Mkube    MkubeConfig    `yaml:"mkube"`
 	Build    BuildConfig    `yaml:"build"`
+	Builders []BuilderConfig `yaml:"builders"`
 	Repos    []RepoConfig   `yaml:"repos"`
+}
+
+type BuilderConfig struct {
+	Name     string `yaml:"name"`
+	Type     string `yaml:"type"`     // "ssh" or "mkube"
+	Arch     string `yaml:"arch"`     // "amd64" or "arm64"
+	Host     string `yaml:"host"`     // SSH host (ssh type only)
+	User     string `yaml:"user"`     // SSH user, default "root"
+	Port     int    `yaml:"port"`     // SSH port, default 22
+	KeyPath  string `yaml:"keyPath"`  // Path to SSH private key
+	BuildDir string `yaml:"buildDir"` // "/build" — wiped between builds
+	Capacity int    `yaml:"capacity"` // Max concurrent (1 for now)
 }
 
 type ServerConfig struct {
@@ -49,6 +62,7 @@ type RepoConfig struct {
 	Dockerfile string        `yaml:"dockerfile"`
 	Tags       []string      `yaml:"tags"`
 	Poll       time.Duration `yaml:"poll"`
+	Arch       string        `yaml:"arch"` // "amd64", "arm64", or "" for any
 }
 
 var envRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
@@ -78,6 +92,22 @@ func Load(path string) (*Config, error) {
 	if cfg.Server.Addr == "" {
 		cfg.Server.Addr = ":8090"
 	}
+	// Default builder config values
+	for i := range cfg.Builders {
+		if cfg.Builders[i].User == "" {
+			cfg.Builders[i].User = "root"
+		}
+		if cfg.Builders[i].Port == 0 {
+			cfg.Builders[i].Port = 22
+		}
+		if cfg.Builders[i].Capacity == 0 {
+			cfg.Builders[i].Capacity = 1
+		}
+		if cfg.Builders[i].BuildDir == "" {
+			cfg.Builders[i].BuildDir = "/build"
+		}
+	}
+
 	for i := range cfg.Repos {
 		if cfg.Repos[i].Branch == "" {
 			cfg.Repos[i].Branch = "main"

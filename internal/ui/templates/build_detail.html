@@ -18,6 +18,10 @@
 
 <div class="detail-meta">
     <div class="meta-item">
+        <label>Builder</label>
+        <span>{{if .BuilderName}}{{.BuilderName}}{{else}}-{{end}}</span>
+    </div>
+    <div class="meta-item">
         <label>Pod</label>
         <span>{{.PodName}}</span>
     </div>

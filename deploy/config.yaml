@@ -17,6 +17,22 @@ build:
   network: "gt"
   cacheDir: "/data/rosecicd/cache"
 
+builders:
+  - name: mkube-arm64
+    type: mkube
+    arch: arm64
+    capacity: 1
+
+  - name: buildx86
+    type: ssh
+    arch: amd64
+    host: "buildx86.gw.lo"
+    user: "root"
+    port: 22
+    keyPath: "/etc/rosecicd/ssh/id_ed25519"
+    buildDir: "/build"
+    capacity: 1
+
 repos:
   - name: mkube
     url: https://github.com/glennswest/mkube
@@ -24,6 +40,7 @@ repos:
     dockerfile: Dockerfile
     tags: [edge]
     poll: 5m
+    arch: arm64
 
   - name: fastregistry
     url: https://github.com/glennswest/fastregistry
@@ -31,6 +48,7 @@ repos:
     dockerfile: Dockerfile
     tags: [edge]
     poll: 10m
+    arch: amd64
 
   - name: microdns
     url: https://github.com/glennswest/microdns
