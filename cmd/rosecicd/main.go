@@ -20,7 +20,7 @@ func main() {
 	// Try specified config, fall back to embedded default
 	path := *cfgPath
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		fallback := path + ".default"
+		const fallback = "/usr/share/rosecicd/config.yaml"
 		if _, err := os.Stat(fallback); err == nil {
 			log.Printf("config %s not found, using default %s", path, fallback)
 			path = fallback
