@@ -6,20 +6,19 @@ Inherits core rules from parent `../CLAUDE.md`. This file tracks project-specifi
 
 ## Work Plan
 
-### Current Version: `v0.1.2`
+### Current Version: `v0.1.6`
 
 ### Current Sprint / Active Tasks
 
-- [ ] Create mkube deploy manifest (rosecicd.yaml)
-- [ ] Deploy controller to mkube on rose
 - [ ] End-to-end test: trigger manual build via web UI
 - [ ] Verify build pod lifecycle (create -> build -> push -> cleanup)
 - [ ] Verify image appears in local registry after build
 - [ ] Test GitHub polling auto-trigger
+- [ ] Set up DNS alias so rosecicd.gt.lo resolves to pod IP
 
 ### In Progress
 
-- [ ] (started 2026-02-23) Deploy to mkube — deploy manifest needed, images already pushed to local registry
+(none)
 
 ### Major Changes / Milestones
 
@@ -40,11 +39,17 @@ Inherits core rules from parent `../CLAUDE.md`. This file tracks project-specifi
 - [x] (2026-02-23) Controller container image — Dockerfile with multi-stage build
 - [x] (2026-02-23) build.sh — podman build/push script with version bumping
 - [x] (2026-02-23) Both images built and pushed to 192.168.200.2:5000
+- [x] (2026-02-23) Create mkube deploy manifest (rosecicd.yaml)
+- [x] (2026-02-23) Deploy controller to mkube — running at 192.168.200.13:8090
+- [x] (2026-02-23) Fix config loading — embed default config at /usr/share/rosecicd/, fallback when volume mount empty
+- [x] (2026-02-23) Fix volume mount overlay — config volume hid embedded files, removed from pod spec
 
 ### Release History
 
 | Version | Date | Summary |
 |---------|------|---------|
+| v0.1.6  | 2026-02-23 | Controller deployed to mkube, config fallback fix |
+| v0.1.3  | 2026-02-23 | Builder image rebuilt and pushed to local registry |
 | v0.1.2  | 2026-02-23 | Controller image built and pushed to local registry |
 | v0.1.1  | 2026-02-23 | Builder image built and pushed to local registry |
 | v0.1.0  | 2026-02-23 | Initial project scaffolding and all source code |
@@ -92,7 +97,7 @@ go vet ./...
 go test ./...
 
 # Deploy to mkube
-oc --server=http://api.rose1.gt.lo:8082 apply -f rosecicd.yaml
+oc --server=http://192.168.200.2:8082 apply -f rosecicd.yaml
 ```
 
 ### Version Locations
@@ -116,7 +121,10 @@ rosecicd.yaml        — image tag in pod spec
 - **Why VFS storage driver?** overlayfs requires kernel support not available in RouterOS containers
 - **Why mounted volume for build spec?** mkube doesn't support env vars in container specs, so config is passed via host-mounted JSON file
 - **Why multi-stage Dockerfiles?** Avoids needing Go toolchain on the build host; podman builds the Go binary inside the container
-- **mkube API port**: 8082 (not 8080 as in some config references — verify at deploy time)
+- **mkube API port**: 8082 (not 8080 as in some config references — confirmed working)
 - **Builder pod network**: Uses `gt` network for registry access
+- **Config fallback**: Default config embedded at `/usr/share/rosecicd/config.yaml`, NOT under `/etc/rosecicd/` because volume mounts overlay that directory
+- **Pod IP**: 192.168.200.13 (assigned by mkube, may change on pod recreation)
+- **DNS alias**: `rosecicd` (via vkube.io/aliases annotation)
 
 ---

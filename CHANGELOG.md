@@ -3,8 +3,9 @@
 ## [Unreleased]
 
 ### 2026-02-23
-- **fix:** Embed default config.yaml in controller image for zero-config startup
-- **fix:** Add config file fallback (config.yaml -> config.yaml.default) in controller
+- **fix:** Move default config to /usr/share/rosecicd/ to avoid volume mount overlay
+- **fix:** Add config file fallback in controller (checks /etc/rosecicd/ then /usr/share/rosecicd/)
+- **feat:** Deploy controller to mkube — running at 192.168.200.13:8090
 - **docs:** Add CLAUDE.md work plan, README.md, CHANGELOG.md
 - **chore:** Update .gitignore with comprehensive ignore patterns
 - **feat:** Add mkube deploy manifest (rosecicd.yaml)
