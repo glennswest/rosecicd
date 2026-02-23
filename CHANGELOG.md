@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### 2026-02-23
+- **fix:** Embed default config.yaml in controller image for zero-config startup
+- **fix:** Add config file fallback (config.yaml -> config.yaml.default) in controller
 - **docs:** Add CLAUDE.md work plan, README.md, CHANGELOG.md
 - **chore:** Update .gitignore with comprehensive ignore patterns
 - **feat:** Add mkube deploy manifest (rosecicd.yaml)

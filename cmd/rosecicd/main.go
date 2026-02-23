@@ -17,7 +17,17 @@ func main() {
 	cfgPath := flag.String("config", "/etc/rosecicd/config.yaml", "config file path")
 	flag.Parse()
 
-	cfg, err := config.Load(*cfgPath)
+	// Try specified config, fall back to embedded default
+	path := *cfgPath
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fallback := path + ".default"
+		if _, err := os.Stat(fallback); err == nil {
+			log.Printf("config %s not found, using default %s", path, fallback)
+			path = fallback
+		}
+	}
+
+	cfg, err := config.Load(path)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
